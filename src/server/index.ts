@@ -2,6 +2,7 @@ import amqp from "amqplib";
 import { publishJSON } from "../internal/pubsub/publish.js";
 import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
 import type { GameState, PlayingState } from "../internal/gamelogic/gamestate.js";
+import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
 
 async function main() {
   const connString = "amqp://guest:guest@localhost:5672/";
@@ -9,9 +10,6 @@ async function main() {
   console.log("Sucessful conection!");
 
   const ch = await conn.createConfirmChannel();
-  publishJSON(ch, ExchangePerilDirect, PauseKey, {
-    isPaused: true
-  } satisfies PlayingState);
 
   ["SIGINT", "SIGTERM"].forEach((signal) =>
     process.on(signal, async () => {
@@ -25,6 +23,36 @@ async function main() {
       }
     }),
   );
+
+  printServerHelp();
+  while (true) {
+    const words = await getInput();
+    if (words.length === 0) continue;
+
+    switch (words[0]) {
+      case "pause": {
+        console.log("sending a pause message!");
+        publishJSON(ch, ExchangePerilDirect, PauseKey, {
+          isPaused: true
+        } satisfies PlayingState);
+        break;
+      };
+      case "resume": {
+        console.log("sending a resume message!");
+        publishJSON(ch, ExchangePerilDirect, PauseKey, {
+          isPaused: false,
+        } satisfies PlayingState);
+        break;
+      };
+      case "quit": {
+        console.log("Goodbye!");
+        process.exit(0);
+      }
+      default: {
+        console.log("don't understand the command!")
+      }
+    }
+  };
 }
 
 main().catch((err) => {
