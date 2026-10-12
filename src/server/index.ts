@@ -1,8 +1,9 @@
 import amqp from "amqplib";
 import { publishJSON } from "../internal/pubsub/publish.js";
-import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
+import { ExchangePerilDirect, ExchangePerilTopic, PauseKey } from "../internal/routing/routing.js";
 import type { GameState, PlayingState } from "../internal/gamelogic/gamestate.js";
 import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
+import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
 
 async function main() {
   const connString = "amqp://guest:guest@localhost:5672/";
@@ -10,6 +11,13 @@ async function main() {
   console.log("Sucessful conection!");
 
   const ch = await conn.createConfirmChannel();
+
+  const [topicCh, queue] = await declareAndBind(
+    conn, 
+    ExchangePerilTopic, 
+    "game_logs", 
+    "game_logs.*", 
+    SimpleQueueType.Durable);
 
   ["SIGINT", "SIGTERM"].forEach((signal) =>
     process.on(signal, async () => {
