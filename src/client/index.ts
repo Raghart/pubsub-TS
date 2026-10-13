@@ -1,17 +1,19 @@
 import amqp from "amqplib";
 import { clientWelcome, commandStatus, getInput, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
 import { declareAndBind, SimpleQueueType, subscribeJSON } from "../internal/pubsub/consume.js";
-import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
+import { ArmyMovesPrefix, ExchangePerilDirect, ExchangePerilTopic, PauseKey } from "../internal/routing/routing.js";
 import { GameState } from "../internal/gamelogic/gamestate.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove } from "../internal/gamelogic/move.js";
-import { handlerPause } from "./handlers.js";
+import { handlerMove, handlerPause } from "./handlers.js";
+import { publishJSON } from "../internal/pubsub/publish.js";
 
 async function main() {
   console.log("Starting Peril client...");
 
   const connString = "amqp://guest:guest@localhost:5672/";
   const conn = await amqp.connect(connString);
+  const ch = await conn.createConfirmChannel();
   const clientName = await clientWelcome();
 
   ["SIGINT", "SIGTERM"].forEach((signal) =>
@@ -28,18 +30,16 @@ async function main() {
   );
 
   const queueName = `pause.${clientName}`;
-
-  const [channel, queue] = await declareAndBind(conn, 
-    ExchangePerilDirect, 
-    queueName, 
-    PauseKey, 
-    SimpleQueueType.Transient);
-
   const gameState = new GameState(clientName);
 
   await subscribeJSON(
     conn, ExchangePerilDirect, queueName, PauseKey, 
-    SimpleQueueType.Transient, handlerPause);
+    SimpleQueueType.Transient, handlerPause(gameState));
+
+  await subscribeJSON(
+    conn, ExchangePerilTopic, `${ArmyMovesPrefix}.${clientName}`, `${ArmyMovesPrefix}.*`, 
+    SimpleQueueType.Transient, handlerMove(gameState),
+  )
 
   printClientHelp();
   while (true) {
@@ -57,7 +57,9 @@ async function main() {
       };
       case "move": {
         try {
-          commandMove(gameState, words);
+          const armyMove = commandMove(gameState, words);
+          publishJSON(ch, ExchangePerilTopic, `${ArmyMovesPrefix}.${clientName}`, armyMove);
+          console.log("The move was published!");
         } catch (err) {
           console.log(err);
         }
