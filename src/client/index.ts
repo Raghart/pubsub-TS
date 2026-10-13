@@ -1,28 +1,48 @@
 import amqp from "amqplib";
 import { clientWelcome, commandStatus, getInput, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
-import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
+import { declareAndBind, SimpleQueueType, subscribeJSON } from "../internal/pubsub/consume.js";
 import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
 import { GameState } from "../internal/gamelogic/gamestate.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove } from "../internal/gamelogic/move.js";
+import { handlerPause } from "./handlers.js";
 
 async function main() {
   console.log("Starting Peril client...");
 
   const connString = "amqp://guest:guest@localhost:5672/";
-  const ch = await amqp.connect(connString);
+  const conn = await amqp.connect(connString);
   const clientName = await clientWelcome();
 
-  const [channel, queue] = await declareAndBind(ch, 
+  ["SIGINT", "SIGTERM"].forEach((signal) =>
+    process.on(signal, async () => {
+      try {
+        await conn.close();
+        console.log("RabbitMQ connection closed.");
+      } catch (err) {
+        console.error("Error closing RabbitMQ connection:", err);
+      } finally {
+        process.exit(0);
+      }
+    }),
+  );
+
+  const queueName = `pause.${clientName}`;
+
+  const [channel, queue] = await declareAndBind(conn, 
     ExchangePerilDirect, 
-    `pause.${clientName}`, 
+    queueName, 
     PauseKey, 
     SimpleQueueType.Transient);
 
   const gameState = new GameState(clientName);
 
+  await subscribeJSON(
+    conn, ExchangePerilDirect, queueName, PauseKey, 
+    SimpleQueueType.Transient, handlerPause);
+
+  printClientHelp();
   while (true) {
-    printClientHelp();
     const words = await getInput();
 
     switch (words[0]) {
