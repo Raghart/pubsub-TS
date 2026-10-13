@@ -5,6 +5,12 @@ export enum SimpleQueueType {
     Transient,
 }
 
+export enum AckType {
+    Ack,
+    NackRequeue,
+    NackDiscard,
+};
+
 export const declareAndBind = async (
     conn: amqp.ChannelModel,
     exchange: string,
@@ -18,6 +24,9 @@ export const declareAndBind = async (
         durable: queueType === SimpleQueueType.Durable ? true : false,
         autoDelete: queueType === SimpleQueueType.Transient ? true : false,
         exclusive: queueType === SimpleQueueType.Transient ? true : false,
+        arguments: {
+            "x-dead-letter-exchange": "peril_dlx"
+        }
     });
 
     await ch.bindQueue(queue.queue, exchange, key);
@@ -30,7 +39,7 @@ export async function subscribeJSON<T> (
     queueName: string,
     key: string,
     queueType: SimpleQueueType,
-    handler: (data: T) => void,
+    handler: (data: T) => AckType,
 ) {
     const [ch, queue] = await declareAndBind(conn, exchange, queueName, key, queueType);
     await ch.consume(queue.queue, (msg: amqp.ConsumeMessage | null) => {
@@ -46,7 +55,17 @@ export async function subscribeJSON<T> (
             return;
         }
 
-        handler(data);
-        ch.ack(msg);
+        const acktype = handler(data);
+        switch (acktype) {
+            case AckType.Ack: {
+                ch.ack(msg);
+            };
+            case AckType.NackRequeue: {
+                ch.nack(msg, false, true);
+            };
+            case AckType.NackDiscard: {
+                ch.nack(msg, false, false);
+            };
+        };
     });
 }
