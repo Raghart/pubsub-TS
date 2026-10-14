@@ -1,5 +1,5 @@
 import amqp, { type ConfirmChannel, type ConsumeMessage } from "amqplib";
-import { clientWelcome, commandStatus, getInput, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
+import { clientWelcome, commandStatus, getInput, getMaliciousLog, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
 import { SimpleQueueType, subscribeJSON } from "../internal/pubsub/consume.js";
 import { ArmyMovesPrefix, ExchangePerilDirect, ExchangePerilTopic, GameLogSlug, PauseKey, WarRecognitionsPrefix } from "../internal/routing/routing.js";
 import { GameState } from "../internal/gamelogic/gamestate.js";
@@ -72,9 +72,18 @@ async function main() {
       };
       case "status": {
         commandStatus(gameState);
+        break;
       };
       case "spam": {
-        console.log("Spamming not allowed yet!");
+        if (words.length !== 2 && isNaN(Number(words[1]))) {
+          console.log("spam cmd usage: spam <number>");
+        };
+        const spamNum = Number(words[1]);
+        for (let n=0; n < spamNum; n++) {
+          const maliciousLogMsg = getMaliciousLog();
+          publishJSON(ch, ExchangePerilTopic, `${GameLogSlug}.${clientName}`, maliciousLogMsg);
+        };
+        break;
       };
       case "help": {
         printClientHelp();

@@ -13,11 +13,6 @@ async function main() {
 
   const ch = await conn.createConfirmChannel();
 
-    await subscribeMsgPack(
-      conn, ExchangePerilTopic, "game_logs", "game_logs.*", SimpleQueueType.Durable, 
-        handlerLogs(),
-      );
-
   ["SIGINT", "SIGTERM"].forEach((signal) =>
     process.on(signal, async () => {
       try {

@@ -43,6 +43,7 @@ export async function subscribeJSON<T> (
     handler: (data: T) => Promise<AckType> | AckType,
 ) {
     const [ch, queue] = await declareAndBind(conn, exchange, queueName, key, queueType);
+    await ch.prefetch(1);
     await ch.consume(queue.queue, async (msg: amqp.ConsumeMessage | null) => {
         if (!msg) {
             return;
