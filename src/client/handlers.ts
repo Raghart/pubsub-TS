@@ -27,15 +27,16 @@ export const handlerMove = (gs: GameState, ch: amqp.ConfirmChannel): (am: ArmyMo
             }
             case MoveOutcome.MakeWar: {
                 try {
-                    await publishJSON(
+                    publishJSON(
                     ch, ExchangePerilTopic, `${WarRecognitionsPrefix}.${gs.getUsername()}`, {
                     attacker: am.player,
                     defender: gs.getPlayerSnap(),
                 } satisfies RecognitionOfWar);
                 } catch (err) {
-                    console.log(`Error publishing the war recognition: ${err}`)
-                } finally {
+                    console.log(`Error publishing the war recognition: ${err}`);
                     return AckType.NackRequeue;
+                } finally {
+                    return AckType.Ack;
                 }
             };
             case MoveOutcome.SamePlayer: {
