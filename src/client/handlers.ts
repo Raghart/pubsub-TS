@@ -7,7 +7,7 @@ import amqp, { type ConfirmChannel } from "amqplib";
 import { publishJSON, publishMsgPack } from "../internal/pubsub/publish.js";
 import { ExchangePerilTopic, GameLogSlug, WarRecognitionsPrefix } from "../internal/routing/routing.js";
 import { handleWar, WarOutcome } from "../internal/gamelogic/war.js";
-import type { GameLog } from "../internal/gamelogic/logs.js";
+import { writeLog, type GameLog } from "../internal/gamelogic/logs.js";
 
 export const publishGameLog = (ch: ConfirmChannel, username: string, message: string) => {
   publishMsgPack(ch, ExchangePerilTopic, `${GameLogSlug}.${username}`, {
@@ -86,4 +86,18 @@ export const handlerWar = (gs: GameState, ch: ConfirmChannel) : (rw: Recognition
             }
         }
     }
+};
+
+export const handlerLogs = () : (gm: GameLog) => Promise<AckType> => {
+    return async (gm: GameLog) => {
+        try {
+            writeLog(gm);
+            return AckType.Ack;
+        } catch (err) {
+            console.error("error while writing:", err)
+            return AckType.NackDiscard;
+        } finally {
+            process.stdout.write("> ");
+        }
+    };
 };

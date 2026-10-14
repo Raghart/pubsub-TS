@@ -1,3 +1,4 @@
+import { decode } from "@msgpack/msgpack";
 import amqp, { type Channel } from "amqplib";
 
 export enum SimpleQueueType {
@@ -54,7 +55,53 @@ export async function subscribeJSON<T> (
             console.log(err);
             return;
         }
-        
+
+        try {
+            const acktype = await handler(data);
+            switch (acktype) {
+                case AckType.Ack: {
+                    ch.ack(msg);
+                    break;
+                };
+                case AckType.NackRequeue: {
+                    ch.nack(msg, false, true);
+                    break;
+                };
+                case AckType.NackDiscard: {
+                    ch.nack(msg, false, false);
+                    break;
+                };
+            };   
+        } catch (err) {
+            console.error(`error handling message: ${err}`);
+            ch.nack(msg, false, false);
+            return;
+        }
+    });
+}
+
+export async function subscribeMsgPack<T> (
+    conn: amqp.ChannelModel,
+    exchange: string,
+    queueName: string,
+    key: string,
+    queueType: SimpleQueueType,
+    handler: (data: T) => Promise<AckType> | AckType,
+) {
+    const [ch, queue] = await declareAndBind(conn, exchange, queueName, key, queueType);
+    await ch.consume(queue.queue, async (msg: amqp.ConsumeMessage | null) => {
+        if (!msg) {
+            return;
+        }
+
+        let data: T;
+        try {
+            data = decode(msg.content) as T;
+        } catch (err) {
+            console.log(err);
+            return;
+        }
+
         try {
             const acktype = await handler(data);
             switch (acktype) {

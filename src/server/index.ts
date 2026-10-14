@@ -3,7 +3,8 @@ import { publishJSON } from "../internal/pubsub/publish.js";
 import { ExchangePerilDirect, ExchangePerilTopic, PauseKey } from "../internal/routing/routing.js";
 import type { GameState, PlayingState } from "../internal/gamelogic/gamestate.js";
 import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
-import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
+import { declareAndBind, SimpleQueueType, subscribeMsgPack } from "../internal/pubsub/consume.js";
+import { handlerLogs } from "../client/handlers.js";
 
 async function main() {
   const connString = "amqp://guest:guest@localhost:5672/";
@@ -12,12 +13,10 @@ async function main() {
 
   const ch = await conn.createConfirmChannel();
 
-  const [topicCh, queue] = await declareAndBind(
-    conn, 
-    ExchangePerilTopic, 
-    "game_logs", 
-    "game_logs.*", 
-    SimpleQueueType.Durable);
+    await subscribeMsgPack(
+      conn, ExchangePerilTopic, "game_logs", "game_logs.*", SimpleQueueType.Durable, 
+        handlerLogs(),
+      );
 
   ["SIGINT", "SIGTERM"].forEach((signal) =>
     process.on(signal, async () => {
